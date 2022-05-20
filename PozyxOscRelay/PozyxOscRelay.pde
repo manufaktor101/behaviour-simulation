@@ -94,7 +94,7 @@ void SendOsc(String id, int x, int y, int z, float heading)
 
     oscP5.send(myMessage, address);
 
-    //println("sending osc for tag " + id);
+    println("sending osc for tag " + id + "x: " + x + " y: " + y + " z: " + z);
   }
   catch(Exception e)
   {
