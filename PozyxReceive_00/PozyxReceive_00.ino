@@ -63,7 +63,6 @@ void loop() {
   if (Pozyx.waitForFlag(POZYX_INT_STATUS_RX_DATA,50))
   {
     // we have received a message!
-    Serial.println("revd msg");
     
     uint8_t length = 0;
     uint16_t messenger = 0x00;
@@ -78,23 +77,23 @@ void loop() {
     //same length as the contents of the buffer, this is the message that was sent to this device
     Pozyx.readRXBufferData((uint8_t *) data, length);
 
-    // RobotCommand command = (RobotCommand)data[0];
+    RobotCommand command = (RobotCommand)data[0];
 
-    switch(data[0])
+    switch(command)
     {
-      case 2:
+      case FORWARD:
         MoveRobot(up);
         break;
-      case 3:
+      case BACK:
         MoveRobot(down);
         break;
-      case 0:
+      case LEFT:
         MoveRobot(left);
         break;
-      case 1:
+      case RIGHT:
         MoveRobot(right);
         break;
-      case 4:
+      case STOP:
         MoveRobot(center);
         break;
       default:
@@ -204,5 +203,3 @@ void MoveRobot(String command)
 //    pixels.setPixelColor(21, pixels.Color(0, 0, 0, 0));
 //    pixels.show(); 
 //
-
-
