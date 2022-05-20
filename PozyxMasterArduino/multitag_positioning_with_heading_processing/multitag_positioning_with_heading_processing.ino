@@ -17,8 +17,8 @@
 ////////////////// PARAMETERS //////////////////
 ////////////////////////////////////////////////
 
-const int num_tags = 2;
-uint16_t tags[num_tags] = {0x6834, 0x6a4a};
+const int num_tags = 1;
+uint16_t tags[num_tags] = {/*0x6834,*/ 0x6a4a};
 
 boolean use_processing = true;                         // set this to true to output data for the processing sketch
 
@@ -75,12 +75,16 @@ void loop() {
     coordinates_t position;
     euler_angles_t euler_angles;
 
+    // long millis_before = millis();
+
     int statusPos = Pozyx.doRemotePositioning(tags[i], &position, dimension, height, algorithm);
     int statusHeading = Pozyx.getEulerAngles_deg(&euler_angles, tags[i]);
 
+    // long millisForRetrieval = millis() - millis_before;
+
     if (statusHeading == POZYX_SUCCESS && statusPos == POZYX_SUCCESS) {
 
-      float32_t heading = euler_angles.heading;//y is "euler_angles.roll" and x is "euler_angles.pitch"
+      float32_t heading = euler_angles.heading;
 
       // prints out the result
       printCoordinates(position, heading, tags[i]);
@@ -124,7 +128,6 @@ void parseAndSendCommand(String commandStr) {
   if (commandStr.startsWith("CMD"))
   {
     // get device id
-
     String deviceStr = commandStr.substring(4, 10);
     uint16_t deviceId = hexStrToInt(deviceStr);
 
@@ -132,62 +135,14 @@ void parseAndSendCommand(String commandStr) {
     Serial.println(deviceId, HEX);
 
     // get command
-    byte command = commandStr[11] - '0';
+    byte command = commandStr[11] - '0'; // char -> int conversion
 
     Serial.println("command in byte is");
     Serial.println(command, DEC);
 
-    String arduinoCommand;
-
-    // map command
-    switch (command)
-    {
-      case 0:
-        // map
-        arduinoCommand = "left ";
-        break;
-      case 1:
-        // map
-        arduinoCommand = "right ";
-
-        break;
-
-      case 2:
-        // map
-        arduinoCommand = "up ";
-        break;
-
-      case 3:
-        // map
-        arduinoCommand = "down ";
-        break;
-
-      case 4:
-        // map
-        arduinoCommand = "center ";
-        break;
-      default:
-        Serial.println("Unknown command received: " + command);
-        return;
-
-    }
-
-    Serial.print("sending command: ");
-    Serial.println(arduinoCommand);
-
-    // send command
-    int length = arduinoCommand.length();
-    uint8_t buffer[length];
-
-    arduinoCommand.getBytes(buffer, length);
-
-    Pozyx.writeTXBufferData(buffer, length);
+    Pozyx.writeTXBufferData(&command, 1);
     Pozyx.sendTXBufferData(deviceId);
-
-
   }
-
-
 }
 
 
