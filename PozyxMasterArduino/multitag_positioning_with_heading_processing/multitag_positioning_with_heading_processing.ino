@@ -80,7 +80,7 @@ void loop() {
 
     if (statusHeading == POZYX_SUCCESS && statusPos == POZYX_SUCCESS) {
 
-      float32_t heading = euler_angles.heading;
+      float32_t heading = euler_angles.heading;//y is "euler_angles.roll" and x is "euler_angles.pitch"
 
       // prints out the result
       printCoordinates(position, heading, tags[i]);
