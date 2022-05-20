@@ -17,7 +17,7 @@
 ////////////////// PARAMETERS //////////////////
 ////////////////////////////////////////////////
 
-const int num_tags = 2;
+const int num_tags = 1;
 uint16_t tags[num_tags] = {0x6834, 0x6a4a};
 
 boolean use_processing = true;                         // set this to true to output data for the processing sketch
@@ -167,7 +167,7 @@ void parseAndSendCommand(String commandStr) {
         arduinoCommand = "center ";
         break;
       default:
-        Serial.println("Unknown command received: "+ command);
+        Serial.println("Unknown command received: " + command);
         return;
 
     }
