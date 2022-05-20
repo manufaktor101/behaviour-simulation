@@ -47,7 +47,7 @@ void setup() {
   #endif
 
   //initialize the pozyx device
-  if(! Pozyx.begin(false, MODE_INTERRUPT, POZYX_INT_MASK_RX_DATA, 0))
+  if(! Pozyx.begin(false, MODE_POLLING, POZYX_INT_MASK_RX_DATA, 0))
   {
     Serial.println("ERROR: Unable to connect to POZYX shield");
     Serial.println("Reset required");
