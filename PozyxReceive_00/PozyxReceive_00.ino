@@ -1,19 +1,26 @@
+//#define USE_PIXEL
+
+
 #include <Pozyx.h>
 #include <Pozyx_definitions.h>
 #include <Wire.h>
 
+
+#ifdef USE_PIXEL
 #include <Adafruit_NeoPixel.h>
+#endif
+
 #define PIN 6
 #define LED_COUNT 40
-#define DELAYVAL 500 
+#define DELAYVAL 500
 
 uint16_t source_id;
 uint16_t destination_id = 0;
-String inputString = "";
 boolean stringComplete = false;
 
+#ifdef USE_PIXEL
 Adafruit_NeoPixel pixels(LED_COUNT, PIN, NEO_GRBW + NEO_KHZ800);
-
+#endif
 
 String center = "$0,0,0,0,0,0,0,0,0,0,0,0#";
 String up = "$1,0,0,0,0,0,0,0,0,0,0,0#";
@@ -21,25 +28,27 @@ String down = "$2,0,0,0,0,0,0,0,0,0,0,0#";
 String left = "$3,0,0,0,0,0,0,0,0,0,0,0#";
 String right = "$4,0,0,0,0,0,0,0,0,0,0,0#";
 
-//String moveCom[5] = {"$0,0,0,0,0,0,0,0,0,0,0,0#", 
-//"$1,0,0,0,0,0,0,0,0,0,0,0#", "$2,0,0,0,0,0,0,0,0,0,0,0#",
-//"$3,0,0,0,0,0,0,0,0,0,0,0#", "$4,0,0,0,0,0,0,0,0,0,0,0#"};
+enum RobotCommand
+{
+    LEFT = 0,
+    RIGHT = 1,
+    FORWARD = 2,
+    BACK = 3,
+    STOP = 4,
+};
 
 void setup() {
   Serial.begin(115200);
-  // put your setup code here, to run once:
-//  Serial.begin(9600);
-  pixels.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
-  pixels.setBrightness(10); // Set BRIGHTNESS to about 1/5 (max = 255)
-  //randomSeed(analogRead(0));
-  
-  pixels.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
-  pixels.show();            // Turn OFF all pixels ASAP
-  pixels.setBrightness(10); // Set BRIGHTNESS to about 1/5 (max = 255)
- 
+
+  #ifdef USE_PIXEL
+    pixels.begin();            // INITIALIZE NeoPixel strip object (REQUIRED)
+    pixels.show();             // Turn OFF all pixels ASAP
+    pixels.setBrightness(10);  // Set BRIGHTNESS to about 1/5 (max = 255)
+  #endif
 
   //initialize the pozyx device
-    if(! Pozyx.begin(false, MODE_INTERRUPT, POZYX_INT_MASK_RX_DATA, 0)){
+  if(! Pozyx.begin(false, MODE_INTERRUPT, POZYX_INT_MASK_RX_DATA, 0))
+  {
     Serial.println("ERROR: Unable to connect to POZYX shield");
     Serial.println("Reset required");
     abort();
@@ -47,24 +56,18 @@ void setup() {
 
     // read the network id of this device
   Pozyx.regRead(POZYX_NETWORK_ID, (uint8_t*)&source_id, 2);
-
-  // reserve 100 bytes for the inputString:
-  inputString.reserve(100);
-
 }
 
 void loop() {
-  
-  
   // we wait up to 50ms to see if we have received an incoming message (if so we receive an RX_DATA interrupt)
   if (Pozyx.waitForFlag(POZYX_INT_STATUS_RX_DATA,50))
   {
-Serial.println("revd msg");
-    
     // we have received a message!
+    Serial.println("revd msg");
+    
     uint8_t length = 0;
     uint16_t messenger = 0x00;
-    delay(1);
+    // delay(1);
     // Let's read out some information about the message (i.e., how many bytes did we receive and who sent the message)
     Pozyx.getLastDataLength(&length);
     Pozyx.getLastNetworkId(&messenger);
@@ -75,90 +78,35 @@ Serial.println("revd msg");
     //same length as the contents of the buffer, this is the message that was sent to this device
     Pozyx.readRXBufferData((uint8_t *) data, length);
 
-    //convert char array data into a string 
+    // RobotCommand command = (RobotCommand)data[0];
 
-//    Serial.println(data);
-
-    inputString = String(data);
-
-//    right
-
-    //compare the string literal with one of the string variables
-    
-    
-    //refactor for loop with foreach loop if the resulting effect is desirable
-    
-    if (inputString == "up")
+    switch(data[0])
     {
-      
-        int len = up.length();
-
-      for (int i=0; i<len; i++)
-      {
-        Serial.print(up.charAt(i));
-      }
-//    Serial.println("Goodbye Madonna");
-    
+      case 2:
+        MoveRobot(up);
+        break;
+      case 3:
+        MoveRobot(down);
+        break;
+      case 0:
+        MoveRobot(left);
+        break;
+      case 1:
+        MoveRobot(right);
+        break;
+      case 4:
+        MoveRobot(center);
+        break;
+      default:
+        Serial.println("unknown RobotCommand: " + command);
     }
-    else if 
-     (inputString == "down")
-    {
-      
-        int len = down.length();
 
-      for (int i=0; i<len; i++)
-      {
-        Serial.print(down.charAt(i));
-      }
-//      Serial.println("Goodbye Anna");
-    
-    }
-     else if(inputString == "center")
-    {
-      
-        int len = center.length();
+  }
+}
 
-      for (int i=0; i<len; i++)
-      {
-        Serial.print(center.charAt(i));
-      }
-//      Serial.println("Goodbye lies");
-    
-    }
-    else if(inputString == "left")
-    {
-      
-        int len = left.length();
-
-      for (int i=0; i<len; i++)
-      {
-        Serial.print(left.charAt(i));
-      }
-
-//      Serial.println("Goodbye problems");
-    
-    }
-    else if(inputString == "right")
-    {
-      
-        int len = right.length();
-
-      for (int i=0; i<len; i++)
-      {
-        Serial.print(right.charAt(i));
-      }
-//      Serial.println("Hello single life");
-    
-    }
-//    else
-//    {
-//      Serial.println(inputString);
-//    }
-
-   inputString="";
-
-
-
+void MoveRobot(String command)
+{
+  Serial.print(command);
 }
 
 //       pixels.setPixelColor(2, pixels.Color(250, 0, 0, 0));
@@ -258,4 +206,3 @@ Serial.println("revd msg");
 //
 
 
-}
