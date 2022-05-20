@@ -60,7 +60,7 @@ void setup() {
 
 void loop() {
   // we wait up to 50ms to see if we have received an incoming message (if so we receive an RX_DATA interrupt)
-  if (Pozyx.waitForFlag(POZYX_INT_STATUS_RX_DATA,50))
+  if (Pozyx.waitForFlag_safe(POZYX_INT_STATUS_RX_DATA,50))
   {
     // we have received a message!
     
