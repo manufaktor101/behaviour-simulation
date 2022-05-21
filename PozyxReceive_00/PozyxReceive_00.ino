@@ -28,42 +28,39 @@ String down = "$2,0,0,0,0,0,0,0,0,0,0,0#";
 String left = "$3,0,0,0,0,0,0,0,0,0,0,0#";
 String right = "$4,0,0,0,0,0,0,0,0,0,0,0#";
 
-enum RobotCommand
-{
-    LEFT = 0,
-    RIGHT = 1,
-    FORWARD = 2,
-    BACK = 3,
-    STOP = 4,
+enum RobotCommand {
+  LEFT = 0,
+  RIGHT = 1,
+  FORWARD = 2,
+  BACK = 3,
+  STOP = 4,
 };
 
 void setup() {
   Serial.begin(115200);
 
-  #ifdef USE_PIXEL
-    pixels.begin();            // INITIALIZE NeoPixel strip object (REQUIRED)
-    pixels.show();             // Turn OFF all pixels ASAP
-    pixels.setBrightness(10);  // Set BRIGHTNESS to about 1/5 (max = 255)
-  #endif
+#ifdef USE_PIXEL
+  pixels.begin();            // INITIALIZE NeoPixel strip object (REQUIRED)
+  pixels.show();             // Turn OFF all pixels ASAP
+  pixels.setBrightness(10);  // Set BRIGHTNESS to about 1/5 (max = 255)
+#endif
 
   //initialize the pozyx device
-  if(! Pozyx.begin(false, MODE_POLLING, POZYX_INT_MASK_RX_DATA, 0))
-  {
+  if (!Pozyx.begin(false, MODE_POLLING, POZYX_INT_MASK_RX_DATA, 0)) {
     Serial.println("ERROR: Unable to connect to POZYX shield");
     Serial.println("Reset required");
     abort();
   }
 
-    // read the network id of this device
-  Pozyx.regRead(POZYX_NETWORK_ID, (uint8_t*)&source_id, 2);
+  // read the network id of this device
+  Pozyx.regRead(POZYX_NETWORK_ID, (uint8_t *)&source_id, 2);
 }
 
 void loop() {
   // we wait up to 50ms to see if we have received an incoming message (if so we receive an RX_DATA interrupt)
-  if (Pozyx.waitForFlag_safe(POZYX_INT_STATUS_RX_DATA,50))
-  {
+  if (Pozyx.waitForFlag_safe(POZYX_INT_STATUS_RX_DATA, 50)) {
     // we have received a message!
-    
+
     uint8_t length = 0;
     uint16_t messenger = 0x00;
     // delay(1);
@@ -73,14 +70,13 @@ void loop() {
 
     char data[length];
 
-    // read the contents of the receive (RX) buffer into a character array called data with the 
+    // read the contents of the receive (RX) buffer into a character array called data with the
     //same length as the contents of the buffer, this is the message that was sent to this device
-    Pozyx.readRXBufferData((uint8_t *) data, length);
+    Pozyx.readRXBufferData((uint8_t *)data, length);
 
     RobotCommand command = (RobotCommand)data[0];
 
-    switch(command)
-    {
+    switch (command) {
       case FORWARD:
         MoveRobot(up);
         break;
@@ -99,12 +95,10 @@ void loop() {
       default:
         Serial.println("unknown RobotCommand: " + command);
     }
-
   }
 }
 
-void MoveRobot(String command)
-{
+void MoveRobot(String command) {
   Serial.print(command);
 }
 
@@ -201,5 +195,5 @@ void MoveRobot(String command)
 //    pixels.show();   // Send the updated pixel colors to the hardware.
 //    delay(100);
 //    pixels.setPixelColor(21, pixels.Color(0, 0, 0, 0));
-//    pixels.show(); 
+//    pixels.show();
 //
