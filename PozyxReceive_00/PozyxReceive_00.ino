@@ -5,6 +5,7 @@
 #include <Pozyx.h>
 #include <Pozyx_definitions.h>
 #include <Wire.h>
+#include <Arduino.h>
 
 
 #ifdef USE_PIXEL
@@ -18,6 +19,15 @@
 uint16_t source_id;
 uint16_t destination_id = 0;
 boolean stringComplete = false;
+
+const uint8_t num_anchors = 4;                                       // the number of anchors
+uint16_t anchors[num_anchors] = { 0x6f4a, 0x6f22, 0x6f77, 0x1134 };  // the network id of the anchors: change these to the network ids of your anchors.
+int32_t anchors_x[num_anchors] = { 0, 5922, 4754, 835 };             // anchor x-coorindates in mm
+int32_t anchors_y[num_anchors] = { 0, 0, 3917, 2160 };               // anchor y-coordinates in mm
+int32_t heights[num_anchors] = { 434, 456, 443, 2031 };              // anchor z-coordinates in mm
+
+uint8_t algorithm = POZYX_POS_ALG_UWB_ONLY;  // positioning algorithm to use
+uint8_t dimension = POZYX_3D;                // positioning dimension
 
 #ifdef USE_PIXEL
 Adafruit_NeoPixel pixels(LED_COUNT, PIN, NEO_GRBW + NEO_KHZ800);
@@ -46,12 +56,16 @@ void setup() {
   pixels.setBrightness(10);  // Set BRIGHTNESS to about 1/5 (max = 255)
 #endif
 
-  //initialize the pozyx device
+  // initialize the pozyx device
   if (!Pozyx.begin(false, MODE_POLLING, POZYX_INT_MASK_RX_DATA, 0)) {
     Serial.println("ERROR: Unable to connect to POZYX shield");
     Serial.println("Reset required");
     abort();
   }
+
+  // add anchors for calibration
+  setAnchorsLocal();
+  setTagsAlgorithmLocal();
 
   // read the network id of this device
   Pozyx.regRead(POZYX_NETWORK_ID, (uint8_t *)&source_id, 2);
@@ -101,6 +115,32 @@ void loop() {
 
 void MoveRobot(String command) {
   Serial.print(command);
+}
+
+// function to manually set the anchor coordinates
+void setAnchorsLocal() {
+  int status = Pozyx.clearDevices();
+  for (int j = 0; j < num_anchors; j++) {
+    device_coordinates_t anchor;
+    anchor.network_id = anchors[j];
+    anchor.flag = 0x1;
+    anchor.pos.x = anchors_x[j];
+    anchor.pos.y = anchors_y[j];
+    anchor.pos.z = heights[j];
+    status &= Pozyx.addDevice(anchor);
+  }
+  if (num_anchors > 4) {
+    Pozyx.setSelectionOfAnchors(POZYX_ANCHOR_SEL_AUTO, num_anchors);
+  }
+  if (status == POZYX_SUCCESS) {
+    Serial.println("Setting anchors locally successful!");
+  } else {
+    Serial.println("Error adding anchors locally");
+  }
+}
+
+void setTagsAlgorithmLocal() {
+  Pozyx.setPositionAlgorithm(algorithm, dimension);
 }
 
 //       pixels.setPixelColor(2, pixels.Color(250, 0, 0, 0));
