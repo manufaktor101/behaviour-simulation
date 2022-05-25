@@ -19,10 +19,18 @@ public class NavigationController : MonoBehaviour
 
     [SerializeField] private float calculatedAngleDebug;
     [SerializeField] private float calculatedDistanceDebug;
+    [SerializeField] private float SetMinMagnitude;
+    [SerializeField] private float SetMinAngle;
+    
 
 
     private Vector3? destination = null;
 
+
+    private void Start()
+    {
+        Debug.Log("Starting navigation controller");
+    }
 
     // Update is called once per frame
     void Update()
@@ -44,9 +52,9 @@ public class NavigationController : MonoBehaviour
             // - turn left
             // - turn right
 
-            if (calculatedAngleDebug < -50)
+            if (calculatedAngleDebug < (-1* SetMinAngle))
                 SendOscCommand(RobotCommand.LEFT);
-            else if (calculatedAngleDebug > 50)
+            else if (calculatedAngleDebug > SetMinAngle)
                 SendOscCommand(RobotCommand.RIGHT);
             else
             {
@@ -54,7 +62,7 @@ public class NavigationController : MonoBehaviour
                 var magnitude = vecRobotDestination.magnitude;
                 // var mappedDistance = distanceMapper.Map(20);
                 calculatedDistanceDebug = magnitude;
-                if (magnitude < 3)
+                if (magnitude < SetMinMagnitude)
                     SendOscCommand(RobotCommand.STOP);
                 else
                 {
@@ -67,14 +75,25 @@ public class NavigationController : MonoBehaviour
 
 
     // Update is called once per frame
-
+    private RobotCommand commandLast = RobotCommand.STOP;
     private void SendOscCommand(RobotCommand command)
     {
-        var oscMessage = new OscMessage();
-        oscMessage.address = oscPath;
+        if(command != commandLast)
+        {
+            Debug.Log($"Sent { command} to { oscPath} (lastCOmmand: {commandLast})");
+            var oscMessage = new OscMessage();
+            oscMessage.address = oscPath;
 
-        oscMessage.values.Add((int)command);
-        osc.Send(oscMessage);
+            oscMessage.values.Add((int)command);
+            osc.Send(oscMessage);
+
+            commandLast = command;
+
+        }
+
+  
+
+        //Debug.Log($"Sent {command} to {oscPath}");
     }
 
     private bool SetNewDestinationIfRequested()
