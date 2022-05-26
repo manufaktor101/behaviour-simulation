@@ -80,6 +80,18 @@ public class NavigationController : MonoBehaviour
     {
         if(command != commandLast)
         {
+            // send stop command first
+            if (command != RobotCommand.STOP) // if we want to send a stop, we dont need to prepare with a stop ofc
+            {
+                Debug.Log($"Sent stop-command to prepare robot for next command");
+                var stopMessage = new OscMessage();
+                stopMessage.address = oscPath;
+                stopMessage.values.Add(RobotCommand.STOP);
+                osc.Send(stopMessage);
+            }
+            
+            
+            // now send the "actual" command
             Debug.Log($"Sent { command} to { oscPath} (lastCOmmand: {commandLast})");
             var oscMessage = new OscMessage();
             oscMessage.address = oscPath;
