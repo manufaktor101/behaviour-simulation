@@ -86,7 +86,7 @@ public class NavigationController : MonoBehaviour
                 Debug.Log($"Sent stop-command to prepare robot for next command");
                 var stopMessage = new OscMessage();
                 stopMessage.address = oscPath;
-                stopMessage.values.Add(RobotCommand.STOP);
+                stopMessage.values.Add((int)RobotCommand.STOP);
                 osc.Send(stopMessage);
             }
             
