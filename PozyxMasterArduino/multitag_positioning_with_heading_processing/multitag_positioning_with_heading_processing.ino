@@ -134,13 +134,16 @@ void parseAndSendCommand(String commandStr) {
     Serial.print("Received command for device: ");
     Serial.println(deviceId, HEX);
 
-    // get command
-    byte command = commandStr[11] - '0'; // char -> int conversion
+    // as we only send few commands to robot (<1/s), we just send them on as string and convert them there to ints
+    // like this we stay consistent and have the ability to debug with terminal
 
-    Serial.println("command in byte is");
-    Serial.println(command, DEC);
+    commandStr = commandStr.substring(10); // we dont need the CMD,<deviceID> anymore -> save some data
 
-    Pozyx.writeTXBufferData(&command, 1);
+    int length = commandString.length();
+    uint8_t buffer[length];
+    inputString.getBytes(buffer, length);
+    // write the message to the transmit (TX) buffer
+    Pozyx.writeTXBufferData(buffer, length);
     Pozyx.sendTXBufferData(deviceId);
   }
 }
