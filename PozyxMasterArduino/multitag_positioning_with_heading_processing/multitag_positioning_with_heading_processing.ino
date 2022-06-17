@@ -156,22 +156,26 @@ void parseAndSendCommand(String commandStr) {
 
   if (commandStr.startsWith("CMD"))
   {
+    Serial.println("Complete received string data: " + inputString);
+
+    StringSplitter *splitter = new StringSplitter(inputString, ',', 7);
+
+    int broadcastFlag = splitter->getItemAtIndex(6).ToInt();
+
     // get device id
-    String deviceStr = commandStr.substring(4, 10);
-    uint16_t deviceId = hexStrToInt(deviceStr);
+    uint16_t remoteId = hexStrToInt(splitter->getItemAtIndex(1));
+    if (broadcastFlag == 1)
+      remote_id = 0;
+    
+    Serial.println("Remote device id set to: ");
+    Serial.print(remoteId, HEX);
 
-    Serial.print("Received command for device: ");
-    Serial.println(deviceId, HEX);
-
-    // as we only send few commands to robot (<1/s), we just send them on as string and convert them there to ints
-    // like this we stay consistent and have the ability to debug with terminal
-
-    commandStr = commandStr.substring(10); // we dont need the CMD,<deviceID> anymore -> save some data
-
+    // convert String to byte array
     int length = commandString.length();
     uint8_t buffer[length];
     inputString.getBytes(buffer, length);
-    // write the message to the transmit (TX) buffer
+    
+    // write the message to the transmit (TX) buffer & send
     Pozyx.writeTXBufferData(buffer, length);
     Pozyx.sendTXBufferData(deviceId);
   }
