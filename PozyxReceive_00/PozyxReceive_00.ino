@@ -6,7 +6,7 @@
 #include <Pozyx_definitions.h>
 #include <Wire.h>
 #include <Arduino.h>
-
+#include "StringSplitter.h"
 
 #ifdef USE_PIXEL
 #include <Adafruit_NeoPixel.h>
@@ -41,14 +41,6 @@ uint8_t dimension = POZYX_3D;                // positioning dimension
 Adafruit_NeoPixel pixels(LED_COUNT, PIN, NEO_GRBW + NEO_KHZ800);
 #endif
 
-String center = "$0,0,0,0,0,0,0,0,0,0,0,0#";
-String up = "$1,0,0,0,0,0,0,0,0,0,0,0#";
-String down = "$2,0,0,0,0,0,0,0,0,0,0,0#";
-//String left = "$3,0,0,0,0,0,0,0,0,0,0,0#";
-//String right = "$4,0,0,0,0,0,0,0,0,0,0,0#";
-String left = "$0,1,0,0,0,0,0,0,0,0,0,0#";
-String right = "$0,2,0,0,0,0,0,0,0,0,0,0#";
-
 SoftwareSerial roboSerial =  SoftwareSerial(rxPin, txPin);
 
 //led matrix
@@ -67,11 +59,6 @@ enum RobotCommand {
   BACK = 2,
   LEFT = 3,
   RIGHT = 4,
-  //  LEFT = 0,
-  //  RIGHT = 1,
-  //  FORWARD = 2,
-  //  BACK = 3,
-  //  STOP = 4,
 };
 
 
@@ -101,6 +88,8 @@ long backInterval = 60000;
 
 unsigned long externalCommandTimeStamp = 0;
 int commandTime = 2000;
+
+bool autonomousMode = true; // defines whether robot has autonomous behaviour. Can be controlled by master tag
 
 void setup() {
   Serial.begin(115200);
@@ -134,52 +123,51 @@ void setup() {
   randomSeed(analogRead(0));
 }
 
+void MoveRobot(RobotCommand command,int motorSpeed = 127) { // if MoveRobot() is only invoked with one param, motorSpeed defaults to max speed
+  Serial.print("$,");
+  Serial.print(command);
+  Serial.print(",");
+  Serial.print(motorSpeed);
+  Serial.print("#");
+}
+
 void loop() {
+
+  if(autonomousMode)
+    UltraSonic();
+  
+  ShowMagCalibrationStatusOnLeds();
+
   // we wait up to 50ms to see if we have received an incoming message (if so we receive an RX_DATA interrupt)
   if (Pozyx.waitForFlag_safe(POZYX_INT_STATUS_RX_DATA, 50)) {
     // we have received a message!
-    externalCommandTimeStamp = millis();
 
     uint8_t length = 0;
-    uint16_t messenger = 0x00;
     // delay(1);
     // Let's read out some information about the message (i.e., how many bytes did we receive and who sent the message)
     Pozyx.getLastDataLength(&length);
-    Pozyx.getLastNetworkId(&messenger);
 
     char data[length];
-
     // read the contents of the receive (RX) buffer into a character array called data with the
     //same length as the contents of the buffer, this is the message that was sent to this device
     Pozyx.readRXBufferData((uint8_t *)data, length);
 
-    RobotCommand command = (RobotCommand)data[0];
-    Serial.println(command);
-//    String s = String(command);
-//    int inte = s.toInt();
-//    Serial.println(inte);
+    String commandStr(data); //copy constructor 
+    Serial.println("Received command from master tag: " + commandStr);
+    
+    StringSplitter *splitter = new StringSplitter((commandStr), ',', 7);
+    RobotCommand robotCommand = (RobotCommand)splitter->getItemAtIndex(2).toInt();
+    int motorSpeed = splitter->getItemAtIndex(3).toInt();
+    
+    // set global autonomous mode  flag acc. to data from master
+    autonomousMode = splitter->getItemAtIndex(5).toInt();
 
-    switch (command) {
-      case FORWARD:
-        MoveRobot(up);
-        break;
-      case BACK:
-        MoveRobot(down);
-        break;
-      case LEFT:
-        MoveRobot(left);
-        break;
-      case RIGHT:
-        MoveRobot(right);
-        break;
-      case STOP:
-        MoveRobot(center);
-        break;
-      default:
-        roboSerial.println("unknown RobotCommand: " + command);
-    }
+    MoveRobot(robotCommand,motorSpeed);
   }
+}
 
+void ShowMagCalibrationStatusOnLeds()
+{
   //calibration MAG and led
   uint8_t calibration_status = 0;
   if (Pozyx.waitForFlag(POZYX_INT_STATUS_IMU, 10) == POZYX_SUCCESS) {
@@ -196,7 +184,9 @@ void loop() {
   else {
     digitalWrite(4, LOW);   // turn the LED on (HIGH is the voltage level)
   }
+}
 
+void UltraSonic(){
   //ULTRASONIC SENSOR
 
   if (trigMode == 3) {
@@ -238,21 +228,21 @@ void loop() {
     //  avoiding obstacle
     //  if (distance < threshold && lastDistance > threshold) { // avoid obstacle (first priority)
     if (distance < threshold && !turn) { // avoid obstacle (first priority)
-      MoveRobot(center);
+      MoveRobot(STOP);
       turn = true;
     }
     if (distance < threshold && turn) {
       float r = random(100);
-      if (r > 50) MoveRobot(right);
-      else MoveRobot(left);
+      if (r > 50) MoveRobot(RIGHT);
+      else MoveRobot(LEFT);
       turnFlag = true;
       mode = "avoidObstacle";
     }
     else if (gather) {
       if (distance > territory && turnFlag) {
         float r = random(100);
-        if (r > 50) MoveRobot(right);
-        else MoveRobot(left);
+        if (r > 50) MoveRobot(RIGHT);
+        else MoveRobot(LEFT);
         turnFlag = false;
         runFlag = true;
         turn = false;
@@ -262,7 +252,7 @@ void loop() {
         idleTimeStamp = millis();
         idleTime = random(1000, 3000);
         pref = random(10);
-        MoveRobot(center);
+        MoveRobot(STOP);
         mode = "idle";
         turnFlag = true;
         runFlag = false;
@@ -272,7 +262,7 @@ void loop() {
       //
       if (mode == "idle" && millis() - idleTimeStamp > idleTime) {
         if (pref > 4) {
-          MoveRobot(up);
+          MoveRobot(FORWARD);
           turnFlag = true;
           runFlag = false;
           turn = false;
@@ -280,8 +270,8 @@ void loop() {
         }
         else {
           float r = random(100);
-          if (r > 50) MoveRobot(right);
-          else MoveRobot(left);
+          if (r > 50) MoveRobot(RIGHT);
+          else MoveRobot(LEFT);
           turnFlag = false;
           runFlag = true;
           turn = false;
@@ -292,8 +282,8 @@ void loop() {
     else if (!gather) {
       if (distance < territory && turnFlag) {
         float r = random(100);
-        if (r > 50) MoveRobot(right);
-        else MoveRobot(left);
+        if (r > 50) MoveRobot(RIGHT);
+        else MoveRobot(LEFT);
         turnFlag = false;
         runFlag = true;
         turn = false;
@@ -303,7 +293,7 @@ void loop() {
         idleTimeStamp = millis();
         idleTime = random(1000, 3000);
         pref = random(10);
-        MoveRobot(center);
+        MoveRobot(STOP);
         mode = "idle";
         turnFlag = true;
         runFlag = false;
@@ -313,7 +303,7 @@ void loop() {
       //
       if (mode == "idle" && millis() - idleTimeStamp > idleTime) {
         if (pref > 2) {
-          MoveRobot(up);
+          MoveRobot(FORWARD);
           turnFlag = true;
           runFlag = false;
           turn = false;
@@ -321,8 +311,8 @@ void loop() {
         }
         else {
           float r = random(100);
-          if (r > 50) MoveRobot(right);
-          else MoveRobot(left);
+          if (r > 50) MoveRobot(RIGHT);
+          else MoveRobot(LEFT);
           turnFlag = false;
           runFlag = true;
           turn = false;
@@ -335,7 +325,7 @@ void loop() {
 
   // every 30 sec
   if (millis() % backInterval < 500 && backFlag) {
-    MoveRobot(down);
+    MoveRobot(BACK);
     Serial.println("back");
     backFlag = false;
   }
@@ -343,19 +333,10 @@ void loop() {
   if (millis() % backInterval > (backInterval - 1000)) {
     backFlag = true;
   }
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
+void UpdateLeds()
+{
   ///led
 
   phase += phaseIncrement;
@@ -411,9 +392,7 @@ void loop() {
   pixels.show();
 }
 
-void MoveRobot(String command) {
-  roboSerial.print(command);
-}
+
 
 // function to manually set the anchor coordinates
 void setAnchorsLocal() {
