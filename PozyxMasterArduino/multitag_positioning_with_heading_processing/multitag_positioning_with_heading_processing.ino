@@ -24,14 +24,16 @@ boolean use_processing = true;                         // set this to true to ou
 
 const uint8_t num_anchors = 4;                                    // the number of anchors
 uint16_t anchors[num_anchors] = {0x6f4a, 0x6f22, 0x6f77, 0x1134};     // the network id of the anchors: change these to the network ids of your anchors.
-int32_t anchors_x[num_anchors] = {0, 5922, 4754, 835};               // anchor x-coorindates in mm
-int32_t anchors_y[num_anchors] = {0, 0, 3917, 2160};                  // anchor y-coordinates in mm
-int32_t heights[num_anchors] = {434, 456, 443, 2031};              // anchor z-coordinates in mm
+int32_t anchors_x[num_anchors] = {0, 5932, 4480, 788};               // anchor x-coorindates in mm
+int32_t anchors_y[num_anchors] = {0, 0, 3927, 1935};                  // anchor y-coordinates in mm
+int32_t heights[num_anchors] = {457, 456, 443, 2036};              // anchor z-coordinates in mm
 
 uint8_t algorithm = POZYX_POS_ALG_UWB_ONLY;             // positioning algorithm to use
 uint8_t dimension = POZYX_3D;                           // positioning dimension
 int32_t height = 1000;   // height of device, required in 2.5D positioning
 
+String inputString = "";            // a string to hold incoming data
+boolean stringComplete = false;     // whether the string is complete
 
 ////////////////////////////////////////////////
 
@@ -66,9 +68,13 @@ void setup() {
 
 void loop() {
 
-  if (Serial.available() > 0)
-  {
-    parseAndSendCommand(Serial.readString());
+    // check if we received a newline character and if so, broadcast the inputString.
+  if(stringComplete){
+
+    parseAndSendCommand(inputString);
+
+    inputString = "";
+    stringComplete = false;
   }
 
   for (int i = 0; i < num_tags; i++) {
@@ -95,6 +101,29 @@ void loop() {
     }
 
 
+  }
+}
+
+/*
+  SerialEvent occurs whenever a new data comes in the
+ hardware serial RX.  This routine is run between each
+ time loop() runs, so using delay inside loop can delay
+ response.  Multiple bytes of data may be available.
+ For more info check http://www.arduino.cc/en/Tutorial/SerialEvent
+ */
+void serialEvent() {
+  while (Serial.available()) {
+    // get the new byte:
+    char inChar = (char)Serial.read();
+
+    // if the incoming character is a newline, set a flag
+    // so the main loop can do something about it.
+    // otherwise, add it to the inputString:
+    if (inChar == '\n') {
+      stringComplete = true;
+    }else{
+      inputString += inChar;
+    }
   }
 }
 
