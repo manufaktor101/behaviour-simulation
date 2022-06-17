@@ -12,6 +12,7 @@
 #include <Pozyx.h>
 #include <Pozyx_definitions.h>
 #include <Wire.h>
+#include "StringSplitter.h"
 
 ////////////////////////////////////////////////
 ////////////////// PARAMETERS //////////////////
@@ -160,24 +161,24 @@ void parseAndSendCommand(String commandStr) {
 
     StringSplitter *splitter = new StringSplitter(inputString, ',', 7);
 
-    int broadcastFlag = splitter->getItemAtIndex(6).ToInt();
+    int broadcastFlag = splitter->getItemAtIndex(6).toInt();
 
     // get device id
     uint16_t remoteId = hexStrToInt(splitter->getItemAtIndex(1));
     if (broadcastFlag == 1)
-      remote_id = 0;
+      remoteId = 0;
     
     Serial.println("Remote device id set to: ");
     Serial.print(remoteId, HEX);
 
     // convert String to byte array
-    int length = commandString.length();
+    int length = commandStr.length();
     uint8_t buffer[length];
     inputString.getBytes(buffer, length);
     
     // write the message to the transmit (TX) buffer & send
     Pozyx.writeTXBufferData(buffer, length);
-    Pozyx.sendTXBufferData(deviceId);
+    Pozyx.sendTXBufferData(remoteId);
   }
 }
 
