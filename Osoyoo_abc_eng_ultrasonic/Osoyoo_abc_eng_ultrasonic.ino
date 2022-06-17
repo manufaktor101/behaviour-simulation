@@ -64,11 +64,13 @@ int sumam;
 int turncount = 0; //Steering intervention time calculation
 float turnoutput = 0;
 /********************Bluetooth control********************/
-#define run_car     '1'//forward
-#define back_car    '2'//backward
-#define left_car    '3'//turn left
-#define right_car   '4'//turn right
-#define stop_car    '0'//stop
+enum RobotCommand {
+  STOP = 0,
+  FORWARD = 1,
+  BACK = 2,
+  LEFT = 3,
+  RIGHT = 4,
+};
 /********************Enumeration of car running status********************/
 enum {
   enSTOP = 0,
@@ -320,101 +322,22 @@ void loop()
   //
   if (newLineReceived)
   {
-    switch (inputString[1])
+    // TODO strip off $ and #: inputString = inputString.substring(1,inputString.length()-1); 
+    // TODO Do StringSPlitter stuff
+    // TODO cast splitString[0] to RobotCommand: RobotCommand robotCommand = (RobotCommand)splitString[0].toInt();
+
+    // TODO set global speed variable to splitCommand[1].toInt();
+    
+    switch (robotCommand)
     {
-      case run_car:   g_carstate = enRUN;   break;
-      case back_car:  g_carstate = enBACK;  break;
-      case left_car:  g_carstate = enLEFT;  break;
-      case right_car: g_carstate = enRIGHT; break;
-      case stop_car:  g_carstate = enSTOP;  break;
+      case FORWARD:   g_carstate = enRUN;   break;
+      case BACK:  g_carstate = enBACK;  break;
+      case LEFT:  g_carstate = enLEFT;  break;
+      case RIGHT: g_carstate = enRIGHT; break;
+      case STOP:  g_carstate = enSTOP;  break;
       default: g_carstate = enSTOP; break;
      }
-
       
-     
-    //Determine whether the protocol has packet loss.
-    if (inputString[3] == '1' && inputString.length() == 21)//pan left
-    {
-      g_carstate = enTLEFT;
-      //Serial.print(returnstr);
-      }
-    else if (inputString[3] == '2' && inputString.length() == 21)//pan right
-     {
-      g_carstate = enTRIGHT;
-      // Serial.print(returnstr);
-     }
-    if (inputString[5] == '1') //inquire PID
-      {
-        char charkp[7], charkd[7], charkpspeed[7], charkispeed[7];
-        dtostrf(kp, 3, 2, charkp);//Amount to %3.2f
-        dtostrf(kd, 3, 2, charkd);//Amount to %3.2f
-        dtostrf(kp_speed, 3, 2, charkpspeed);//Amount to %3.2f
-        dtostrf(ki_speed, 3, 2, charkispeed);//Amount to %3.2f
-        String strkp = charkp; String strkd = charkd; 
-        String strkpspeed = charkpspeed; String strkispeed = charkispeed;
-        returntemp = "$0,0,0,0,0,0,AP" + strkp + ",AD" + strkd + ",VP" + strkpspeed + ",VI" + strkispeed + "#";
-        Serial.print(returntemp); //Return protocol packet
-      }
-      else if (inputString[5] == '2')//recover PID
-      {
-        ResetPID();
-        Serial.print("$OK#");//Return protocol packet
-      }
-      if (inputString[7] == '1')//Automatic report
-      {
-        g_autoup = true;
-        Serial.print("$OK#");//Return protocol packet
-      }
-      else if (inputString[7] == '2')//Stop reporting automatically
-      {
-        g_autoup = false;
-        Serial.print("$OK#"); //Return protocol packet
-      }
-      if (inputString[9] == '1') //Angle loop update $0,0,0,0,1,1,AP23.54,AD85.45,VP10.78,VI0.26#
-      {
-        int i = inputString.indexOf("AP");
-        int ii = inputString.indexOf(",", i);
-        if(ii > i)
-        {
-          String m_skp = inputString.substring(i + 2, ii);
-          m_skp.replace(".", "");
-          int m_kp = m_skp.toInt();
-          kp = (double)( (double)m_kp / 100.0f);
-        }
-        i = inputString.indexOf("AD");
-        ii = inputString.indexOf(",", i);
-        if(ii > i)
-        {
-          //ki = inputString.substring(i+2, ii);
-          String m_skd = inputString.substring(i + 2, ii);
-          m_skd.replace(".", "");
-          int m_kd = m_skd.toInt();
-          kd = (double)( (double)m_kd / 100.0f);
-        }
-        Serial.print("$OK#");//Return protocol packet
-      }
-      if (inputString[11] == '1') //Speed loop update
-      {
-        int i = inputString.indexOf("VP");
-        int ii = inputString.indexOf(",", i);
-        if(ii > i)
-        {
-          String m_svp = inputString.substring(i + 2, ii);
-          m_svp.replace(".", "");
-          int m_vp = m_svp.toInt();
-          kp_speed = (double)( (double)m_vp / 100.0f);
-        }
-        i = inputString.indexOf("VI");
-        ii = inputString.indexOf("#", i);
-        if(ii > i)
-        {
-          String m_svi = inputString.substring(i + 2, ii);
-          m_svi.replace(".", "");
-          int m_vi = m_svi.toInt();
-          ki_speed = (double)( (double)m_vi / 100.0f);
-          Serial.print("$OK#"); //Return protocol packet
-        }
-      }
       //Restore the default
       inputString = "";   // clear the string
       newLineReceived = false;
