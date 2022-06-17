@@ -1,6 +1,6 @@
-//#define USE_PIXEL
+#define USE_PIXEL
 
-
+#include <SoftwareSerial.h>
 
 #include <Pozyx.h>
 #include <Pozyx_definitions.h>
@@ -15,6 +15,14 @@
 #define PIN 6
 #define LED_COUNT 40
 #define DELAYVAL 500
+
+//
+#define trigPin 2
+#define echoPin 3
+
+//software serial
+#define rxPin 10
+#define txPin 11
 
 uint16_t source_id;
 uint16_t destination_id = 0;
@@ -36,19 +44,73 @@ Adafruit_NeoPixel pixels(LED_COUNT, PIN, NEO_GRBW + NEO_KHZ800);
 String center = "$0,0,0,0,0,0,0,0,0,0,0,0#";
 String up = "$1,0,0,0,0,0,0,0,0,0,0,0#";
 String down = "$2,0,0,0,0,0,0,0,0,0,0,0#";
-String left = "$3,0,0,0,0,0,0,0,0,0,0,0#";
-String right = "$4,0,0,0,0,0,0,0,0,0,0,0#";
+//String left = "$3,0,0,0,0,0,0,0,0,0,0,0#";
+//String right = "$4,0,0,0,0,0,0,0,0,0,0,0#";
+String left = "$0,1,0,0,0,0,0,0,0,0,0,0#";
+String right = "$0,2,0,0,0,0,0,0,0,0,0,0#";
+
+SoftwareSerial roboSerial =  SoftwareSerial(rxPin, txPin);
+
+//led matrix
+struct Point {
+  float x;
+  float y;
+};
+float phase = 0.0;
+float phaseIncrement = 0.01;  // Controls the speed of the moving points. Higher == faster. I like 0.08 ..03 change to .02
+float colorStretch = 0.11;    // Higher numbers will produce tighter color bands. I like 0.11 . ok try .11 instead of .03
 
 enum RobotCommand {
-  LEFT = 0,
-  RIGHT = 1,
-  FORWARD = 2,
-  BACK = 3,
-  STOP = 4,
+
+  STOP = 0,
+  FORWARD = 1,
+  BACK = 2,
+  LEFT = 3,
+  RIGHT = 4,
+  //  LEFT = 0,
+  //  RIGHT = 1,
+  //  FORWARD = 2,
+  //  BACK = 3,
+  //  STOP = 4,
 };
+
+
+// Define variables:
+unsigned long duration;
+int distance;
+int lastDistance;
+unsigned long timeStamp = 0;
+int trigMode = 3;
+int threshold = 60;
+
+// autonomous behavior
+int territory = 200;
+boolean turnFlag = true;
+boolean runFlag = false;
+boolean turn = false;
+String mode = "NULL";
+unsigned long idleTimeStamp = 0;
+int idleTime = 0;
+int pref = 0;
+
+boolean gather = true; // If it's false, find empty spot to go.
+// if it's true, find target to get closer
+
+boolean backFlag = true;
+long backInterval = 60000;
+
+unsigned long externalCommandTimeStamp = 0;
+int commandTime = 2000;
 
 void setup() {
   Serial.begin(115200);
+  roboSerial.begin(115200);
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  pinMode(rxPin, INPUT);
+  pinMode(txPin, OUTPUT);
+  pinMode(4, OUTPUT);//led calibration MAG
+  digitalWrite(4, LOW);
 
 #ifdef USE_PIXEL
   pixels.begin();            // INITIALIZE NeoPixel strip object (REQUIRED)
@@ -58,8 +120,8 @@ void setup() {
 
   // initialize the pozyx device
   if (!Pozyx.begin(false, MODE_POLLING, POZYX_INT_MASK_RX_DATA, 0)) {
-    Serial.println("ERROR: Unable to connect to POZYX shield");
-    Serial.println("Reset required");
+    roboSerial.println("ERROR: Unable to connect to POZYX shield");
+    roboSerial.println("Reset required");
     abort();
   }
 
@@ -69,12 +131,14 @@ void setup() {
 
   // read the network id of this device
   Pozyx.regRead(POZYX_NETWORK_ID, (uint8_t *)&source_id, 2);
+  randomSeed(analogRead(0));
 }
 
 void loop() {
   // we wait up to 50ms to see if we have received an incoming message (if so we receive an RX_DATA interrupt)
   if (Pozyx.waitForFlag_safe(POZYX_INT_STATUS_RX_DATA, 50)) {
     // we have received a message!
+    externalCommandTimeStamp = millis();
 
     uint8_t length = 0;
     uint16_t messenger = 0x00;
@@ -90,6 +154,10 @@ void loop() {
     Pozyx.readRXBufferData((uint8_t *)data, length);
 
     RobotCommand command = (RobotCommand)data[0];
+    Serial.println(command);
+//    String s = String(command);
+//    int inte = s.toInt();
+//    Serial.println(inte);
 
     switch (command) {
       case FORWARD:
@@ -108,13 +176,243 @@ void loop() {
         MoveRobot(center);
         break;
       default:
-        Serial.println("unknown RobotCommand: " + command);
+        roboSerial.println("unknown RobotCommand: " + command);
     }
   }
+
+  //calibration MAG and led
+  uint8_t calibration_status = 0;
+  if (Pozyx.waitForFlag(POZYX_INT_STATUS_IMU, 10) == POZYX_SUCCESS) {
+    Pozyx.getCalibrationStatus(&calibration_status);
+  } else {
+    uint8_t interrupt_status = 0;
+    Pozyx.getInterruptStatus(&interrupt_status);
+    return;
+  }
+
+  if (((calibration_status & 0xC0) >> 6) == 3) {
+    digitalWrite(4, HIGH);   // turn the LED on (HIGH is the voltage level)
+  }
+  else {
+    digitalWrite(4, LOW);   // turn the LED on (HIGH is the voltage level)
+  }
+
+  //ULTRASONIC SENSOR
+
+  if (trigMode == 3) {
+    digitalWrite(trigPin, LOW);
+    trigMode = 0;
+    timeStamp = micros();
+  }
+
+  // Trigger the sensor by setting the trigPin high for 10 microseconds:
+  if (micros() - timeStamp > 5 && trigMode == 0) {
+    digitalWrite(trigPin, HIGH);
+    trigMode = 1;
+  }
+
+  if (micros() - timeStamp > 15 && trigMode == 1) {
+    digitalWrite(trigPin, LOW);
+    trigMode = 2;
+  }
+
+  if (trigMode == 2) {
+    // Read the echoPin, pulseIn() returns the duration (length of the pulse) in microseconds:
+    duration = pulseIn(echoPin, HIGH);
+    // Calculate the distance:
+    distance = duration * 0.034 / 2;
+
+    // Print the distance on the Serial Monitor (Ctrl+Shift+M):
+    Serial.print("Distance: ");
+    Serial.print(distance);
+    Serial.print(" cm ");
+    Serial.print(" Mode: ");
+    Serial.println(mode);
+
+    trigMode = 3;
+  }
+
+
+
+  if (millis() - externalCommandTimeStamp > commandTime) {
+    //  avoiding obstacle
+    //  if (distance < threshold && lastDistance > threshold) { // avoid obstacle (first priority)
+    if (distance < threshold && !turn) { // avoid obstacle (first priority)
+      MoveRobot(center);
+      turn = true;
+    }
+    if (distance < threshold && turn) {
+      float r = random(100);
+      if (r > 50) MoveRobot(right);
+      else MoveRobot(left);
+      turnFlag = true;
+      mode = "avoidObstacle";
+    }
+    else if (gather) {
+      if (distance > territory && turnFlag) {
+        float r = random(100);
+        if (r > 50) MoveRobot(right);
+        else MoveRobot(left);
+        turnFlag = false;
+        runFlag = true;
+        turn = false;
+        mode = "lookforTarget";
+      } else if (distance < territory && runFlag ) {
+        //this is the time it goes "idle" mode
+        idleTimeStamp = millis();
+        idleTime = random(1000, 3000);
+        pref = random(10);
+        MoveRobot(center);
+        mode = "idle";
+        turnFlag = true;
+        runFlag = false;
+        turn = false;
+        randomSeed(analogRead(0));
+      }
+      //
+      if (mode == "idle" && millis() - idleTimeStamp > idleTime) {
+        if (pref > 4) {
+          MoveRobot(up);
+          turnFlag = true;
+          runFlag = false;
+          turn = false;
+          mode = "followingTarget";
+        }
+        else {
+          float r = random(100);
+          if (r > 50) MoveRobot(right);
+          else MoveRobot(left);
+          turnFlag = false;
+          runFlag = true;
+          turn = false;
+          mode = "lookforTarget";
+        }
+      }
+    }
+    else if (!gather) {
+      if (distance < territory && turnFlag) {
+        float r = random(100);
+        if (r > 50) MoveRobot(right);
+        else MoveRobot(left);
+        turnFlag = false;
+        runFlag = true;
+        turn = false;
+        mode = "lookforTarget";
+      } else if (distance > territory && runFlag ) {
+        //this is the time it goes "idle" mode
+        idleTimeStamp = millis();
+        idleTime = random(1000, 3000);
+        pref = random(10);
+        MoveRobot(center);
+        mode = "idle";
+        turnFlag = true;
+        runFlag = false;
+        turn = false;
+        randomSeed(analogRead(0));
+      }
+      //
+      if (mode == "idle" && millis() - idleTimeStamp > idleTime) {
+        if (pref > 2) {
+          MoveRobot(up);
+          turnFlag = true;
+          runFlag = false;
+          turn = false;
+          mode = "followingTarget";
+        }
+        else {
+          float r = random(100);
+          if (r > 50) MoveRobot(right);
+          else MoveRobot(left);
+          turnFlag = false;
+          runFlag = true;
+          turn = false;
+          mode = "lookforTarget";
+        }
+      }
+    }
+    lastDistance = distance;
+  }
+
+  // every 30 sec
+  if (millis() % backInterval < 500 && backFlag) {
+    MoveRobot(down);
+    Serial.println("back");
+    backFlag = false;
+  }
+
+  if (millis() % backInterval > (backInterval - 1000)) {
+    backFlag = true;
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ///led
+
+  phase += phaseIncrement;
+
+  // The two points move along Lissajious curves, see: http://en.wikipedia.org/wiki/Lissajous_curve
+  // We want values that fit the LED grid: x values between 0..13, y values between 0..8 .
+  // The sin() function returns values in the range of -1.0..1.0, so scale these to our desired ranges.
+  // The phase value is multiplied by various constants; I chose these semi-randomly, to produce a nice motion.
+  Point p1 = { (sin(phase * 1.000) + 1.0) * 4.5, (sin(phase * 1.310) + 1.0) * 4.0 };
+  Point p2 = { (sin(phase * 1.770) + 1.0) * 4.5, (sin(phase * 2.865) + 1.0) * 4.0 };
+  Point p3 = { (sin(phase * 0.250) + 1.0) * 4.5, (sin(phase * 0.750) + 1.0) * 4.0 };
+
+  byte row, col;
+
+  // For each row...
+  for ( row = 0; row < 5; row++ ) {
+    float row_f = float(row);  // Optimization: Keep a floating point value of the row number, instead of recasting it repeatedly.
+
+    // For each column...
+    for ( col = 0; col < 8; col++ ) {
+      float col_f = float(col);  // Optimization.
+
+      // Calculate the distance between this LED, and p1.
+      Point dist1 = { col_f - p1.x, row_f - p1.y };  // The vector from p1 to this LED.
+      float distance1 = sqrt( dist1.x * dist1.x + dist1.y * dist1.y );
+
+      // Calculate the distance between this LED, and p2.
+      Point dist2 = { col_f - p2.x, row_f - p2.y };  // The vector from p2 to this LED.
+      float distance2 = sqrt( dist2.x * dist2.x + dist2.y * dist2.y );
+
+      // Calculate the distance between this LED, and p3.
+      Point dist3 = { col_f - p3.x, row_f - p3.y };  // The vector from p3 to this LED.
+      float distance3 = sqrt( dist3.x * dist3.x + dist3.y * dist3.y );
+
+      // Warp the distance with a sin() function. As the distance value increases, the LEDs will get light,dark,light,dark,etc...
+      // You can use a cos() for slightly different shading, or experiment with other functions. Go crazy!
+      float color_1 = distance1;  // range: 0.0...1.0
+      float color_2 = distance2;
+      float color_3 = distance3;
+      float color_4 = (sin( distance1 * distance2 * colorStretch )) + 2.0 * 0.5;
+
+      // Square the color_f value to weight it towards 0. The image will be darker and have higher contrast.
+      color_1 *= color_1 * color_4;
+      color_2 *= color_2 * color_4;
+      color_3 *= color_3 * color_4;
+      color_4 *= color_4;
+
+      // Scale the color up to 0..7 . Max brightness is 7.
+      //strip.setPixelColor(col + (8 * row), strip.Color(color_4, 0, 0) );
+      pixels.setPixelColor(col + (8 * row), pixels.Color(0, color_2, color_3));
+    }
+  }
+  pixels.show();
 }
 
 void MoveRobot(String command) {
-  Serial.print(command);
+  roboSerial.print(command);
 }
 
 // function to manually set the anchor coordinates
@@ -133,108 +431,12 @@ void setAnchorsLocal() {
     Pozyx.setSelectionOfAnchors(POZYX_ANCHOR_SEL_AUTO, num_anchors);
   }
   if (status == POZYX_SUCCESS) {
-    Serial.println("Setting anchors locally successful!");
+    roboSerial.println("Setting anchors locally successful!");
   } else {
-    Serial.println("Error adding anchors locally");
+    roboSerial.println("Error adding anchors locally");
   }
 }
 
 void setTagsAlgorithmLocal() {
   Pozyx.setPositionAlgorithm(algorithm, dimension);
 }
-
-//       pixels.setPixelColor(2, pixels.Color(250, 0, 0, 0));
-//  //  pixels.show();   // Send the updated pixel colors to the hardware.
-//
-//    pixels.setPixelColor(3, pixels.Color(250, 0, 0, 0));
-// //   pixels.show();   // Send the updated pixel colors to the hardware.
-//
-//    pixels.setPixelColor(4, pixels.Color(250, 0, 0, 0));
-//  //  pixels.show();   // Send the updated pixel colors to the hardware.
-//
-//    pixels.setPixelColor(5, pixels.Color(250, 0, 0, 0));
-//  //  pixels.show();   // Send the updated pixel colors to the hardware
-//
-//    pixels.setPixelColor(9, pixels.Color(250, 0, 0, 0));
-//  //  pixels.show();   // Send the updated pixel colors to the hardware.
-//
-//    pixels.setPixelColor(14, pixels.Color(250, 0, 0, 0));
-//  //  pixels.show();   // Send the updated pixel colors to the hardware.
-//
-//    pixels.setPixelColor(23, pixels.Color(250, 0, 0, 0));
-// //   pixels.show();   // Send the updated pixel colors to the hardware.
-//
-//    pixels.setPixelColor(16, pixels.Color(250, 0, 0, 0));
-// //   pixels.show();   // Send the updated pixel colors to the hardware.
-//
-//    pixels.setPixelColor(25, pixels.Color(250, 0, 0, 0));
-// //   pixels.show();   // Send the updated pixel colors to the hardware.
-//
-//    pixels.setPixelColor(30, pixels.Color(250, 0, 0, 0));
-// //   pixels.show();   // Send the updated pixel colors to the hardware.
-//
-//    pixels.setPixelColor(34, pixels.Color(250, 0, 0, 0));
-// //   pixels.show();   // Send the updated pixel colors to the hardware.
-//
-//    pixels.setPixelColor(35, pixels.Color(250, 0, 0, 0));
-//  //  pixels.show();   // Send the updated pixel colors to the hardware.
-//
-//    pixels.setPixelColor(36, pixels.Color(250, 0, 0, 0));
-////    pixels.show();   // Send the updated pixel colors to the hardware.
-//
-//    pixels.setPixelColor(37, pixels.Color(250, 0, 0, 0));
-//    //pixels.show();   // Send the updated pixel colors to the hardware.
-//
-
-//pupille
-//    pixels.setPixelColor(20, pixels.Color(250, 250, 250, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    delay(100);  //je höher, je langsamer
-//    pixels.setPixelColor(20, pixels.Color(0, 0, 0, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    pixels.setPixelColor(19, pixels.Color(250, 250, 250, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    delay(100);
-//    pixels.setPixelColor(19, pixels.Color(0, 0, 0, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    pixels.setPixelColor(18, pixels.Color(250, 250, 250, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    delay(100);
-//    pixels.setPixelColor(18, pixels.Color(0, 0, 0, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    pixels.setPixelColor(17, pixels.Color(250, 250, 250, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    delay(100);
-//    pixels.setPixelColor(17, pixels.Color(0, 0, 0, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    pixels.setPixelColor(18, pixels.Color(250, 250, 250, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    delay(100);
-//    pixels.setPixelColor(18, pixels.Color(0, 0, 0, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    pixels.setPixelColor(19, pixels.Color(250, 250, 250, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    delay(100);
-//    pixels.setPixelColor(19, pixels.Color(0, 0, 0, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    pixels.setPixelColor(20, pixels.Color(250, 250, 250, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    delay(100);
-//    pixels.setPixelColor(20, pixels.Color(0, 0, 0, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    pixels.setPixelColor(21, pixels.Color(250, 250, 250, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    delay(100);
-//    pixels.setPixelColor(21, pixels.Color(0, 0, 0, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    pixels.setPixelColor(22, pixels.Color(250, 250, 250, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    delay(100);
-//    pixels.setPixelColor(22, pixels.Color(0, 0, 0, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    pixels.setPixelColor(21, pixels.Color(250, 250, 250, 0));
-//    pixels.show();   // Send the updated pixel colors to the hardware.
-//    delay(100);
-//    pixels.setPixelColor(21, pixels.Color(0, 0, 0, 0));
-//    pixels.show();
-//
